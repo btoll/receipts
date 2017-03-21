@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <sqlite3.h>
 
-void main(void) {
+int main(void) {
     sqlite3 *db;
     char *err_msg;
 
@@ -18,7 +18,7 @@ void main(void) {
         "DROP TABLE IF EXISTS stores;"
         "DROP TABLE IF EXISTS items;"
         "CREATE TABLE stores (id INTEGER PRIMARY KEY, name TEXT, street TEXT, city TEXT, state TEXT, zip TEXT, phone TEXT);"
-        "CREATE TABLE items (id INTEGER PRIMARY KEY, item TEXT, amount REAL);";
+        "CREATE TABLE items (id INTEGER PRIMARY KEY, item TEXT, amount REAL, date INT);";
 
     res = sqlite3_exec(db, sql, 0, 0, &err_msg);
 
@@ -28,5 +28,7 @@ void main(void) {
         sqlite3_close(db);
         exit(1);
     }
+
+    return 0;
 }
 
