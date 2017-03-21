@@ -1,0 +1,6 @@
+a.out
+*.o
+*.db
+create_db
+receipts
+
