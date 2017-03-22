@@ -1,10 +1,13 @@
-receipts.o: receipts.c
-	gcc -Wall -o receipts receipts.c -lsqlite3
-	gcc -Wall -o create_db create_db.c -lsqlite3
+CC      = gcc
+LDLIBS  = -lsqlite3
+WARN    = -W -Wall
 
-install:
-	./create_db
+receipts: receipts.o
+	$(CC) $(WARN) -o receipts receipts.c $(LDLIBS)
+
+db: db.o
+	$(CC) $(WARN) -o db db.c $(LDLIBS)
 
 clean:
-	rm -rf receipts create_db
+	rm db receipts *.o
 

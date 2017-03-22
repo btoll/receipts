@@ -152,7 +152,7 @@ sqlite3 *get_db() {
     sqlite3 *db;
 
     if (!fopen("./.receipts.db", "r")) {
-        fprintf(stderr, "[ERROR] No database, run `make install`.\n");
+        fprintf(stderr, "[ERROR] No database, run `make db`.\n");
         exit(1);
     }
 
