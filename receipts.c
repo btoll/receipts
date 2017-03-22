@@ -7,53 +7,96 @@
 
 // TODO: Catch signals like Ctrl-C, Ctrl-D.
 
+int has_rows(sqlite3 *db);
+
 void add_receipt(sqlite3 *db) {
-    int n = 1;
-    int cb(void *_, int argc, char **argv, char **col_name) {
-        int i;
-
-        for (i = 0; i < argc; ++i)
-            printf("\t%d: %s\n", n++, argv[i]);
-
-        return 0;
-    }
-
-    char *sql = "SELECT name FROM stores";
+    char *sql = "SELECT id, name, street, city FROM stores";
     char *err_msg = 0;
-    int res;
 
-    printf("\nKnown stores:\n");
-    res = sqlite3_exec(db, sql, cb, 0, &err_msg);
+    if (has_rows(db)) {
+        sqlite3_stmt *stmt;
+        int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
-    if (res == SQLITE_OK) {
-        int n = 0;
-        char item[MAX], amount[MAX];
-        char month[2], day[2], year[4];
+        printf("\nKnown stores:\n\n");
 
-        printf("\n\tSelect store: ");
-        scanf("%d%*c", &n);
+        if (rc == SQLITE_OK) {
+            int ncols = sqlite3_column_count(stmt);
+            int i;
 
-        printf("\tItem: ");
-        fgets(item, MAX, stdin);
-        item[strcspn(item, "\n")] = '\0';
+            for (i = 0; i < ncols; ++i)
+                printf("\t%s", sqlite3_column_name(stmt, i));
 
-        printf("\tAmount (without dollar sign): ");
-        fgets(amount, MAX, stdin);
-        amount[strcspn(amount, "\n")] = '\0';
+            while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+                int i;
 
-        printf("\tMonth of purchase (MM): ");
-        fgets(month, MAX, stdin);
-        month[strcspn(month, "\n")] = '\0';
+                printf("\n");
 
-        printf("\tDay of purchase (DD): ");
-        fgets(day, MAX, stdin);
-        day[strcspn(day, "\n")] = '\0';
+                for (i = 0; i < ncols; ++i)
+                    printf("\t%s", sqlite3_column_text(stmt, i));
+            }
 
-        printf("\tYear of purchase (YYYY): ");
-        fgets(year, MAX, stdin);
-        year[strcspn(year, "\n")] = '\0';
+            printf("\n");
+
+            sqlite3_stmt *res;
+            int store_id = 0;
+            char item[MAX], amount[MAX];
+            char *year = (char *) malloc(5);
+            char *month = (char *) malloc(3);
+            char *day = (char *) malloc(3);
+
+            printf("\n\tSelect store: ");
+            scanf("%d%*c", &store_id);
+
+            printf("\tItem: ");
+            fgets(item, MAX, stdin);
+            item[strcspn(item, "\n")] = '\0';
+
+            printf("\tAmount (without dollar sign): ");
+            fgets(amount, MAX, stdin);
+            amount[strcspn(amount, "\n")] = '\0';
+
+            printf("\tMonth of purchase (MM): ");
+            fgets(month, MAX, stdin);
+            month[strcspn(month, "\n")] = '\0';
+
+            printf("\tDay of purchase (DD): ");
+            fgets(day, MAX, stdin);
+            day[strcspn(day, "\n")] = '\0';
+
+            printf("\tYear of purchase (YYYY): ");
+            fgets(year, MAX, stdin);
+            year[strcspn(year, "\n")] = '\0';
+
+            char *date = year;
+            strncat(date, "-", 1);
+            strncat(date, month, 2);
+            strncat(date, "-", 1);
+            strncat(date, day, 2);
+            date[10] = '\0';
+
+            char *sql = "INSERT INTO items VALUES(NULL, ?, ?, ?, cast(strftime('%s', ?) as int));";
+            int rc = sqlite3_prepare_v2(db, sql, -1, &res, 0);
+
+            if (rc == SQLITE_OK) {
+                sqlite3_bind_int(res, 1, store_id);
+                sqlite3_bind_text(res, 2, item, -1, SQLITE_STATIC);
+                sqlite3_bind_text(res, 3, amount, -1, SQLITE_STATIC);
+                sqlite3_bind_text(res, 4, date, -1, SQLITE_STATIC);
+
+                sqlite3_step(res);
+                sqlite3_finalize(res);
+
+                printf("\n\tEntered!\n\n");
+            } else
+                fprintf(stderr, "Failed to execute statement: %s\n", sqlite3_errmsg(db));
+
+            free(year);
+            free(month);
+            free(day);
+        } else
+            fprintf(stderr, "Could not select data: %s\n", sqlite3_errmsg(db));
     } else
-        fprintf(stderr, "Could not select data: %s\n", sqlite3_errmsg(db));
+        fprintf(stderr, "\n\tThere are no stores. There must be at least one store before a receipt can be entered.\n\n");
 
     sqlite3_free(err_msg);
 }
@@ -99,6 +142,8 @@ void add_store(sqlite3 *db) {
 
         sqlite3_step(res);
         sqlite3_finalize(res);
+
+        printf("\n\tEntered!\n\n");
     } else
         fprintf(stderr, "Failed to execute statement: %s\n", sqlite3_errmsg(db));
 }
@@ -120,6 +165,26 @@ sqlite3 *get_db() {
     }
 
     return db;
+}
+
+int has_rows(sqlite3 *db) {
+    sqlite3_stmt *stmt;
+    char *count = "SELECT COUNT(*) AS records FROM stores";
+    int rc = sqlite3_prepare_v2(db, count, -1, &stmt, 0);
+
+    if (rc == SQLITE_OK) {
+        rc = sqlite3_step(stmt);
+
+        if (rc == SQLITE_ROW) {
+            const unsigned char *text = sqlite3_column_text(stmt, 0);
+
+            if (text[0] != '0')
+                return 1;
+        }
+    } else
+        fprintf(stderr, "Could not select data: %s\n", sqlite3_errmsg(db));
+
+    return 0;
 }
 
 int main(void) {

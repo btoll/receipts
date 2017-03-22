@@ -18,7 +18,7 @@ int main(void) {
         "DROP TABLE IF EXISTS stores;"
         "DROP TABLE IF EXISTS items;"
         "CREATE TABLE stores (id INTEGER PRIMARY KEY, name TEXT, street TEXT, city TEXT, state TEXT, zip TEXT, phone TEXT);"
-        "CREATE TABLE items (id INTEGER PRIMARY KEY, item TEXT, amount REAL, date INT);";
+        "CREATE TABLE items (id INTEGER PRIMARY KEY, store INT, item TEXT, amount REAL, date INT);";
 
     res = sqlite3_exec(db, sql, 0, 0, &err_msg);
 
