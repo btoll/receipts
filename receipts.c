@@ -8,6 +8,7 @@
 // TODO: Catch signals like Ctrl-C, Ctrl-D.
 
 int has_rows(sqlite3 *db);
+void required(char *field, char *buf);
 
 void add_receipt(sqlite3 *db) {
     char *sql = "SELECT id, name, street, city FROM stores";
@@ -47,24 +48,19 @@ void add_receipt(sqlite3 *db) {
             printf("\n\tSelect store: ");
             scanf("%d%*c", &store_id);
 
-            printf("\tItem: ");
-            fgets(item, MAX, stdin);
+            required("\tItem: ", item);
             item[strcspn(item, "\n")] = '\0';
 
-            printf("\tAmount (without dollar sign): ");
-            fgets(amount, MAX, stdin);
+            required("\tAmount (without dollar sign): ", amount);
             amount[strcspn(amount, "\n")] = '\0';
 
-            printf("\tMonth of purchase (MM): ");
-            fgets(month, MAX, stdin);
+            required("\tMonth of purchase (MM): ", month);
             month[strcspn(month, "\n")] = '\0';
 
-            printf("\tDay of purchase (DD): ");
-            fgets(day, MAX, stdin);
+            required("\tDay of purchase (DD): ", day);
             day[strcspn(day, "\n")] = '\0';
 
-            printf("\tYear of purchase (YYYY): ");
-            fgets(year, MAX, stdin);
+            required("\tYear of purchase (YYYY): ", year);
             year[strcspn(year, "\n")] = '\0';
 
             char *date = year;
@@ -105,23 +101,20 @@ void add_store(sqlite3 *db) {
     sqlite3_stmt *res;
     char store[MAX], street[MAX], city[MAX], state[MAX], zip[MAX], phone[MAX];
 
-    printf("\n\tStore name: ");
-    fgets(store, MAX, stdin);
+    required("\n\tStore name: ", store);
     store[strcspn(store, "\n")] = '\0';
 
     printf("\tStreet (optional): ");
     fgets(street, MAX, stdin);
     street[strcspn(street, "\n")] = '\0';
 
-    printf("\tCity: ");
-    fgets(city, MAX, stdin);
+    required("\tCity: ", city);
     city[strcspn(city, "\n")] = '\0';
 
-    printf("\tState: ");
-    fgets(state, MAX, stdin);
+    required("\tState: ", state);
     state[strcspn(state, "\n")] = '\0';
 
-    printf("\tZip: ");
+    printf("\tZip (optional): ");
     fgets(zip, MAX, stdin);
     zip[strcspn(zip, "\n")] = '\0';
 
@@ -185,6 +178,16 @@ int has_rows(sqlite3 *db) {
         fprintf(stderr, "Could not select data: %s\n", sqlite3_errmsg(db));
 
     return 0;
+}
+
+void required(char *field, char *buf) {
+    printf(field, buf);
+    fgets(buf, MAX, stdin);
+
+    if (strlen(buf) == 1) {                         // Only contains newline.
+        fprintf(stderr, "\t\tCannot be blank\n");
+        required(field, buf);
+    }
 }
 
 int main(void) {

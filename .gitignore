@@ -3,4 +3,5 @@ a.out
 *.db
 db
 receipts
+test.c
 
