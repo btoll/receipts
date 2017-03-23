@@ -5,28 +5,37 @@
 int main(void) {
     sqlite3 *db;
     char *err_msg;
+    FILE *fp;
 
-    int res = sqlite3_open("./.receipts.db", &db);
+    fp = fopen("./.receipts.db", "r");
 
-    if (res != SQLITE_OK) {
-        fprintf(stderr, "Failed to create database: %s\n", sqlite3_errmsg(db));
-        sqlite3_close(db);
-        exit(1);
-    }
+    if (fp)
+        printf("[WARN] Database already exists, will not overwrite.\n");
+    else {
+        int res = sqlite3_open("./.receipts.db", &db);
 
-    char *sql =
-        "DROP TABLE IF EXISTS stores;"
-        "DROP TABLE IF EXISTS items;"
-        "CREATE TABLE stores (id INTEGER PRIMARY KEY, name TEXT, street TEXT, city TEXT, state TEXT, zip TEXT, phone TEXT);"
-        "CREATE TABLE items (id INTEGER PRIMARY KEY, store INT, item TEXT, amount REAL, date INT);";
+        if (res != SQLITE_OK) {
+            fprintf(stderr, "Failed to create database: %s\n", sqlite3_errmsg(db));
+            sqlite3_close(db);
+            exit(1);
+        }
 
-    res = sqlite3_exec(db, sql, 0, 0, &err_msg);
+        char *sql =
+            "DROP TABLE IF EXISTS stores;"
+            "DROP TABLE IF EXISTS items;"
+            "CREATE TABLE stores (id INTEGER PRIMARY KEY, name TEXT, street TEXT, city TEXT, state TEXT, zip TEXT, phone TEXT);"
+            "CREATE TABLE items (id INTEGER PRIMARY KEY, store INT, item TEXT, amount REAL, date INT);";
 
-    if (res != SQLITE_OK) {
-        fprintf(stderr, "Failed to create database tables: %s\n", err_msg);
-        sqlite3_free(err_msg);
-        sqlite3_close(db);
-        exit(1);
+        res = sqlite3_exec(db, sql, 0, 0, &err_msg);
+
+        if (res != SQLITE_OK) {
+            fprintf(stderr, "Failed to create database tables: %s\n", err_msg);
+            sqlite3_free(err_msg);
+            sqlite3_close(db);
+            exit(1);
+        }
+
+        printf("[SUCCESS] Database created.\n");
     }
 
     return 0;
