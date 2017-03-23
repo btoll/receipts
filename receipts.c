@@ -7,8 +7,10 @@
 
 // TODO: Catch signals like Ctrl-C, Ctrl-D.
 
+void clear(void);
 int has_rows(sqlite3 *db);
 void required(char *field, char *buf);
+void strip_newline(char *buf);
 
 void add_receipt(sqlite3 *db) {
     char *sql = "SELECT id, name, street, city FROM stores";
@@ -45,22 +47,11 @@ void add_receipt(sqlite3 *db) {
             char *day = (char *) malloc(3);
 
             required("\n\tSelect store: ", store_id);
-            store_id[strcspn(store_id, "\n")] = '\0';
-
             required("\tItem: ", item);
-            item[strcspn(item, "\n")] = '\0';
-
             required("\tAmount (without dollar sign): ", amount);
-            amount[strcspn(amount, "\n")] = '\0';
-
             required("\tMonth of purchase (MM): ", month);
-            month[strcspn(month, "\n")] = '\0';
-
             required("\tDay of purchase (DD): ", day);
-            day[strcspn(day, "\n")] = '\0';
-
             required("\tYear of purchase (YYYY): ", year);
-            year[strcspn(year, "\n")] = '\0';
 
             char *date = year;
             strncat(date, "-", 1);
@@ -81,7 +72,8 @@ void add_receipt(sqlite3 *db) {
                 sqlite3_step(stmt);
                 sqlite3_finalize(stmt);
 
-                printf("\n\tEntered!\n\n");
+                clear();
+                printf("\n[SUCCESS] Added receipt.\n\n");
             } else
                 fprintf(stderr, "Failed to execute statement: %s\n", sqlite3_errmsg(db));
 
@@ -101,25 +93,21 @@ void add_store(sqlite3 *db) {
     char store[MAX], street[MAX], city[MAX], state[MAX], zip[MAX], phone[MAX];
 
     required("\n\tStore name: ", store);
-    store[strcspn(store, "\n")] = '\0';
 
     printf("\tStreet (optional): ");
     fgets(street, MAX, stdin);
-    street[strcspn(street, "\n")] = '\0';
+    strip_newline(street);
 
     required("\tCity: ", city);
-    city[strcspn(city, "\n")] = '\0';
-
     required("\tState (i.e., MA): ", state);
-    state[strcspn(state, "\n")] = '\0';
 
     printf("\tZip (optional): ");
     fgets(zip, MAX, stdin);
-    zip[strcspn(zip, "\n")] = '\0';
+    strip_newline(zip);
 
     printf("\tPhone (optional): ");
     fgets(phone, MAX, stdin);
-    phone[strcspn(phone, "\n")] = '\0';
+    strip_newline(phone);
 
     char *sql = "INSERT INTO stores VALUES(NULL, ?, ?, ?, ?, ?, ?);";
     int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
@@ -135,9 +123,16 @@ void add_store(sqlite3 *db) {
         sqlite3_step(stmt);
         sqlite3_finalize(stmt);
 
-        printf("\n\tEntered!\n\n");
+        clear();
+        printf("\n[SUCCESS] Added store.\n\n");
     } else
         fprintf(stderr, "Failed to execute statement: %s\n", sqlite3_errmsg(db));
+}
+
+void clear(void) {
+    // Clear the screen.
+    // http://stackoverflow.com/questions/2347770/how-do-you-clear-console-screen-in-c#7660837
+    printf("\e[1;1H\e[2J");
 }
 
 sqlite3 *get_db() {
@@ -179,6 +174,11 @@ int has_rows(sqlite3 *db) {
     return 0;
 }
 
+void query(void) {
+    clear();
+    printf("TODO\n");
+}
+
 void required(char *field, char *buf) {
     printf(field, buf);
     fgets(buf, MAX, stdin);
@@ -187,30 +187,43 @@ void required(char *field, char *buf) {
         fprintf(stderr, "\t\tCannot be blank\n");
         required(field, buf);
     }
+
+    strip_newline(buf);
+}
+
+void strip_newline(char *buf) {
+    buf[strcspn(buf, "\n")] = '\0';
 }
 
 int main(void) {
+    char buf[4];
     int n;
     sqlite3 *db = get_db();
 
+    clear();
+
     do {
         printf("What do you want to do?\n\n");
-        printf("\t1. Enter new receipt\n");
-        printf("\t2. Enter new store\n");
-        printf("\t3. Exit\n");
-        printf("\nSelect: ");
+        printf("\t1. New receipt\n");
+        printf("\t2. New store\n");
+        printf("\t3. Query\n");
+        printf("\t4. Exit\n");
 
-        scanf("%d%*c", &n);
+        required("\nSelect: ", buf);
+        // Convert to digit. (Is there a better way?)
+        n = *buf - '0';
 
         if (n == 1)
             add_receipt(db);
         else if (n == 2)
             add_store(db);
-        else if (n == 3) {
+        else if (n == 3)
+            query();
+        else if (n == 4) {
             printf("Goodbye.\n");
             n = -1;
         } else {
-            printf("Unrecognized selection %d, goodbye.\n", n);
+            printf("Unrecognized selection %d.\nGoodbye.\n", n);
             n = -1;
         }
     } while (n != -1);
