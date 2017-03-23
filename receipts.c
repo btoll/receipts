@@ -38,15 +38,14 @@ void add_receipt(sqlite3 *db) {
 
             printf("\n");
 
-            sqlite3_stmt *res;
-            int store_id = 0;
+            char store_id[3];
             char item[MAX], amount[MAX];
             char *year = (char *) malloc(5);
             char *month = (char *) malloc(3);
             char *day = (char *) malloc(3);
 
-            printf("\n\tSelect store: ");
-            scanf("%d%*c", &store_id);
+            required("\n\tSelect store: ", store_id);
+            store_id[strcspn(store_id, "\n")] = '\0';
 
             required("\tItem: ", item);
             item[strcspn(item, "\n")] = '\0';
@@ -70,17 +69,17 @@ void add_receipt(sqlite3 *db) {
             strncat(date, day, 2);
             date[10] = '\0';
 
-            char *sql = "INSERT INTO items VALUES(NULL, ?, ?, ?, cast(strftime('%s', ?) as int));";
-            int rc = sqlite3_prepare_v2(db, sql, -1, &res, 0);
+            char *sql = "INSERT INTO items VALUES(NULL, cast(? as int), ?, ?, cast(strftime('%s', ?) as int));";
+            int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
             if (rc == SQLITE_OK) {
-                sqlite3_bind_int(res, 1, store_id);
-                sqlite3_bind_text(res, 2, item, -1, SQLITE_STATIC);
-                sqlite3_bind_text(res, 3, amount, -1, SQLITE_STATIC);
-                sqlite3_bind_text(res, 4, date, -1, SQLITE_STATIC);
+                sqlite3_bind_text(stmt, 1,store_id, -1, SQLITE_STATIC);
+                sqlite3_bind_text(stmt, 2, item, -1, SQLITE_STATIC);
+                sqlite3_bind_text(stmt, 3, amount, -1, SQLITE_STATIC);
+                sqlite3_bind_text(stmt, 4, date, -1, SQLITE_STATIC);
 
-                sqlite3_step(res);
-                sqlite3_finalize(res);
+                sqlite3_step(stmt);
+                sqlite3_finalize(stmt);
 
                 printf("\n\tEntered!\n\n");
             } else
@@ -98,7 +97,7 @@ void add_receipt(sqlite3 *db) {
 }
 
 void add_store(sqlite3 *db) {
-    sqlite3_stmt *res;
+    sqlite3_stmt *stmt;
     char store[MAX], street[MAX], city[MAX], state[MAX], zip[MAX], phone[MAX];
 
     required("\n\tStore name: ", store);
@@ -111,7 +110,7 @@ void add_store(sqlite3 *db) {
     required("\tCity: ", city);
     city[strcspn(city, "\n")] = '\0';
 
-    required("\tState: ", state);
+    required("\tState (i.e., MA): ", state);
     state[strcspn(state, "\n")] = '\0';
 
     printf("\tZip (optional): ");
@@ -123,18 +122,18 @@ void add_store(sqlite3 *db) {
     phone[strcspn(phone, "\n")] = '\0';
 
     char *sql = "INSERT INTO stores VALUES(NULL, ?, ?, ?, ?, ?, ?);";
-    int rc = sqlite3_prepare_v2(db, sql, -1, &res, 0);
+    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
     if (rc == SQLITE_OK) {
-        sqlite3_bind_text(res, 1, store, -1, SQLITE_STATIC);
-        sqlite3_bind_text(res, 2, street, -1, SQLITE_STATIC);
-        sqlite3_bind_text(res, 3, city, -1, SQLITE_STATIC);
-        sqlite3_bind_text(res, 4, state, -1, SQLITE_STATIC);
-        sqlite3_bind_text(res, 5, zip, -1, SQLITE_STATIC);
-        sqlite3_bind_text(res, 6, phone, -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 1, store, -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 2, street, -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 3, city, -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 4, state, -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 5, zip, -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 6, phone, -1, SQLITE_STATIC);
 
-        sqlite3_step(res);
-        sqlite3_finalize(res);
+        sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
 
         printf("\n\tEntered!\n\n");
     } else
@@ -149,9 +148,9 @@ sqlite3 *get_db() {
         exit(1);
     }
 
-    int res = sqlite3_open("./.receipts.db", &db);
+    int rc = sqlite3_open("./.receipts.db", &db);
 
-    if (res != SQLITE_OK) {
+    if (rc != SQLITE_OK) {
         fprintf(stderr, "Failed to open database: %s\n", sqlite3_errmsg(db));
         sqlite3_close(db);
         exit(1);
@@ -211,7 +210,7 @@ int main(void) {
             printf("Goodbye.\n");
             n = -1;
         } else {
-            printf("Unrecognized selection %d\n", n);
+            printf("Unrecognized selection %d, goodbye.\n", n);
             n = -1;
         }
     } while (n != -1);
