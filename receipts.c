@@ -6,6 +6,7 @@
 
 // TODO: Catch signals like Ctrl-C, Ctrl-D.
 // TODO: Should date be timestamp or just yyyy-mm-dd string?
+// TODO: sqlite3 finalize() calls.
 
 void add_receipt(sqlite3 *db) {
     char *sql = "SELECT id, store, street, city, state FROM stores";
@@ -13,6 +14,7 @@ void add_receipt(sqlite3 *db) {
 
     if (has_rows(db, "stores")) {
         sqlite3_stmt *stmt;
+
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
         printf("\nKnown stores:\n\n");
@@ -36,14 +38,19 @@ void add_receipt(sqlite3 *db) {
             printf("\n");
 
             char store_id[3];
-            char item[VALUE_MAX], amount[VALUE_MAX];
+            char total_cost[VALUE_MAX];
             char *year = (char *) malloc(5);
             char *month = (char *) malloc(3);
             char *day = (char *) malloc(3);
 
             required("\n\tSelect store id: ", store_id);
-            required("\tItem: ", item);
-            required("\tAmount (without dollar sign): ", amount);
+
+            // Get the items and only enter in the db after the receipt after the receipt has been entered
+            // so we can get its receipt_id.
+            char *items[ROWS][COLS];
+            int nrows = get_receipt_items(items, 0);
+
+            required("\tTotal cost (no dollar sign): ", total_cost);
             required("\tMonth of purchase (MM): ", month);
             required("\tDay of purchase (DD): ", day);
             required("\tYear of purchase (YYYY): ", year);
@@ -55,28 +62,58 @@ void add_receipt(sqlite3 *db) {
             strncat(date, day, 2);
             date[10] = '\0';
 
-            char *sql = "INSERT INTO items VALUES(NULL, cast(? as int), ?, ?, cast(strftime('%s', ?) as int));";
-            int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+            sql = "INSERT INTO receipts VALUES(NULL, cast(? as int), cast(? as real), cast(strftime('%s', ?) as int));";
+            rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
             if (rc == SQLITE_OK) {
-                sqlite3_bind_text(stmt, 1,store_id, -1, SQLITE_STATIC);
-                sqlite3_bind_text(stmt, 2, item, -1, SQLITE_STATIC);
-                sqlite3_bind_text(stmt, 3, amount, -1, SQLITE_STATIC);
-                sqlite3_bind_text(stmt, 4, date, -1, SQLITE_STATIC);
+                sqlite3_bind_text(stmt, 1, store_id, -1, SQLITE_STATIC);
+                sqlite3_bind_text(stmt, 2, total_cost, -1, SQLITE_STATIC);
+                sqlite3_bind_text(stmt, 3, date, -1, SQLITE_STATIC);
 
                 sqlite3_step(stmt);
                 sqlite3_finalize(stmt);
 
+                sql = "INSERT INTO receipts VALUES(NULL, cast(? as int), ?, cast(? as real));";
+                rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+                if (rc == SQLITE_OK) {
+                    sqlite3_step(stmt);
+                    sqlite3_finalize(stmt);
+
+                    int last_insert_id = sqlite3_last_insert_rowid(db);
+
+                    for (i = 0; i < nrows; ++i) {
+                        sql = "INSERT INTO items VALUES(NULL, ?, ?, cast(? as real), cast(? as real));";
+                        rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+                        if (rc == SQLITE_OK) {
+                            sqlite3_bind_int(stmt, 1, last_insert_id);
+                            sqlite3_bind_text(stmt, 2, items[i][0], -1, SQLITE_STATIC);
+                            sqlite3_bind_text(stmt, 3, items[i][1], -1, SQLITE_STATIC);
+                            sqlite3_bind_text(stmt, 4, items[i][2], -1, SQLITE_STATIC);
+
+                            sqlite3_step(stmt);
+                            sqlite3_finalize(stmt);
+                        } else
+                            // TODO
+                            fprintf(stderr, "[ERROR] Bad shit happened: %s.\n", sqlite3_errmsg(db));
+                    }
+                } else
+                    sqlite3_finalize(stmt);
+
                 clear();
-                printf("\n[SUCCESS] Added receipt.\n\n");
+
+                printf("\n[SUCCESS] Added receipt and items.\n\n");
             } else
                 fprintf(stderr, "Failed to execute statement: %s\n", sqlite3_errmsg(db));
 
             free(year);
             free(month);
             free(day);
-        } else
+        } else {
+            sqlite3_finalize(stmt);
             fprintf(stderr, "Could not select data: %s\n", sqlite3_errmsg(db));
+        }
     } else
         fprintf(stderr, "\n\tThere are no stores. There must be at least one store before a receipt can be entered.\n\n");
 
@@ -90,16 +127,16 @@ void add_store(sqlite3 *db) {
     required("\n\tStore name: ", store);
 
     printf("\tStreet (optional): ");
-    strip_newline(fgets(street, VALUE_MAX, stdin));
+    strip_newline(fgets(street, VALUE_MAX, stdin), '\0');
 
     required("\tCity: ", city);
-    required("\tState (i.e., MA): ", state);
+    required("\tState (2 letters): ", state);
 
     printf("\tZip (optional): ");
-    strip_newline(fgets(zip, VALUE_MAX, stdin));
+    strip_newline(fgets(zip, VALUE_MAX, stdin), '\0');
 
     printf("\tPhone (optional): ");
-    strip_newline(fgets(phone, VALUE_MAX, stdin));
+    strip_newline(fgets(phone, VALUE_MAX, stdin), '\0');
 
     char *sql = "INSERT INTO stores VALUES(NULL, ?, ?, ?, ?, ?, ?);";
     int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
@@ -113,18 +150,19 @@ void add_store(sqlite3 *db) {
         sqlite3_bind_text(stmt, 6, phone, -1, SQLITE_STATIC);
 
         sqlite3_step(stmt);
-        sqlite3_finalize(stmt);
 
         clear();
         printf("\n[SUCCESS] Added store.\n\n");
     } else
         fprintf(stderr, "Failed to execute statement: %s\n", sqlite3_errmsg(db));
+
+    sqlite3_finalize(stmt);
 }
 
 void *build_cols(char *s, char *q) {
     int i, len, d;
-    // Note that to do a proper store name (INNER JOIN) lookup that "items.store_id" needs to be mapped to "stores.store".
-    char *cols[] = { "items.id, ", "stores.store, ", "items.item, ", "items.amount, ", "date(items.date, 'unixepoch'), ", 0 };
+    // Note that to do a proper store name (INNER JOIN) lookup that "receipts.store_id" needs to be mapped to "stores.store".
+    char *cols[] = { "receipts.id, ", "stores.store, ", "receipts.item, ", "receipts.total_cost, ", "date(receipts.date, 'unixepoch'), ", 0 };
 
     if (s[0] == '*')
         for (i = 0; cols[i]; ++i)
@@ -168,6 +206,32 @@ sqlite3 *get_db(void) {
     return db;
 }
 
+int get_receipt_items(char *buf[][COLS], int n) {
+    char *name = (char *) malloc(VALUE_MAX);
+    char *cost = (char *) malloc(VALUE_MAX);
+    char *quantity = (char *) malloc(VALUE_MAX);
+
+    printf("\tItem name: ");
+    strip_newline(fgets(name, VALUE_MAX, stdin), '\0');
+
+    if (name[0] != '\0') {
+        printf("\tItem cost: ");
+        strip_newline(fgets(cost, VALUE_MAX, stdin), '\0');
+
+        printf("\tItem quantity: ");
+        strip_newline(fgets(quantity, VALUE_MAX, stdin), '\0');
+
+        buf[n][0] = name;
+        buf[n][1] = cost;
+        buf[n][2] = quantity;
+
+        n = get_receipt_items(buf, ++n);
+    } else
+        buf[n][0] = buf[n][1] = buf[n][2] = NULL;
+
+    return n;
+}
+
 int has_rows(sqlite3 *db, char *table) {
     sqlite3_stmt *stmt;
     char count[QUERY_MAX] = "SELECT COUNT(*) AS records FROM ";
@@ -188,18 +252,22 @@ int has_rows(sqlite3 *db, char *table) {
     } else
         fprintf(stderr, "Could not select data: %s\n", sqlite3_errmsg(db));
 
+    sqlite3_finalize(stmt);
+
     return 0;
 }
 
 void query(sqlite3 *db) {
     clear();
 
-    if (has_rows(db, "items")) {
+    if (has_rows(db, "receipts")) {
         sqlite3_stmt *stmt;
-        char sql[QUERY_MAX] = "SELECT * FROM items";
+        char sql[QUERY_MAX] = "SELECT * FROM receipts";
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
         if (rc == SQLITE_OK) {
+            sqlite3_finalize(stmt);
+
             int fn(void *_, int argc, char **argv, char **col_name) {
                 int i;
 
@@ -213,7 +281,7 @@ void query(sqlite3 *db) {
 
             int i, ncols = sqlite3_column_count(stmt);
             char cols[QUERY_MAX], query[QUERY_MAX] = "SELECT ";
-            char query_end[] = " FROM items INNER JOIN stores ON items.store_id = stores.id;";
+            char query_end[] = " FROM receipts INNER JOIN stores ON receipts.store_id = stores.id;";
 
             printf("Select one or more comma-delimited columns, or * for all.\n");
             printf("\nColumns:\n\n");
@@ -222,7 +290,7 @@ void query(sqlite3 *db) {
                 printf("\t%d %s\n", i, sqlite3_column_name(stmt, i));
 
             printf("\nSelect columns: ");
-            strip_newline(fgets(cols, QUERY_MAX, stdin));
+            strip_newline(fgets(cols, QUERY_MAX, stdin), '\0');
             build_cols(cols, query);
 
             // Include the terminating null byte.
@@ -250,14 +318,18 @@ void query(sqlite3 *db) {
                     printf("\n\n");
                 }
             }
-        } else
+
+            sqlite3_finalize(stmt);
+        } else {
+            sqlite3_finalize(stmt);
             printf("[WARN] The query could not be performed.\n");
+        }
     } else
         printf("[WARN] There is no data. No data, no queries.\n\n");
 }
 
 void required(char *field, char *buf) {
-    printf(field, buf);
+    printf(field);
     fgets(buf, VALUE_MAX, stdin);
 
     if (strlen(buf) == 1) {                         // Only contains newline.
@@ -265,11 +337,11 @@ void required(char *field, char *buf) {
         required(field, buf);
     }
 
-    strip_newline(buf);
+    strip_newline(buf, '\0');
 }
 
-void strip_newline(char *buf) {
-    buf[strcspn(buf, "\n")] = '\0';
+void strip_newline(char *buf, char swap) {
+    buf[strcspn(buf, "\n")] = swap;
 }
 
 int main(void) {

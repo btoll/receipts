@@ -20,11 +20,15 @@ int main(void) {
             exit(1);
         }
 
+        // Is it worth using transactions here?
         char *sql =
             "DROP TABLE IF EXISTS stores;"
+            "DROP TABLE IF EXISTS receipts;"
             "DROP TABLE IF EXISTS items;"
+
             "CREATE TABLE stores (id INTEGER PRIMARY KEY, store TEXT NOT NULL, street TEXT, city TEXT, state TEXT, zip TEXT, phone TEXT);"
-            "CREATE TABLE items (id INTEGER PRIMARY KEY, store_id INTEGER, item TEXT NOT NULL, amount REAL NOT NULL, date INTEGER NOT NULL, FOREIGN KEY(store_id) REFERENCES stores(id));";
+            "CREATE TABLE receipts (id INTEGER PRIMARY KEY, store_id INTEGER, total_cost REAL NOT NULL, date INTEGER NOT NULL, FOREIGN KEY(store_id) REFERENCES stores(id));"
+            "CREATE TABLE items (id INTEGER PRIMARY KEY, receipt_id INTEGER, item TEXT NOT NULL, cost REAL NOT NULL, quantity REAL NOT NULL, FOREIGN KEY(receipt_id) REFERENCES receipts(id));";
 
         res = sqlite3_exec(db, sql, 0, 0, &err_msg);
 
