@@ -3,10 +3,35 @@
 #include <string.h>
 #include <sqlite3.h>
 #include "receipts.h"
+#include "libdb.c"
 
 // TODO: Catch signals like Ctrl-C, Ctrl-D.
 // TODO: Should date be timestamp or just yyyy-mm-dd string?
 // TODO: sqlite3 finalize() calls.
+
+void *add_cols_to_sql_query(char *s, char *q) {
+        // SELECT stores.store, DATE(receipts.date, "unixepoch"), items.item, items.cost FROM receipts INNER JOIN stores ON receipts.store_id = stores.id INNER JOIN items ON receipts.id = items.receipt_id;
+    int i, len, d;
+    // Note that to do a proper store name (INNER JOIN) lookup that "receipts.store_id" needs to be mapped to "stores.store".
+//     char *cols[] = { "receipts.id, ", "stores.store, ", "receipts.total_cost, ", "DATE(receipts.date, 'unixepoch'), ", 0 };
+    char *cols[] = { "receipts.id, ", "stores.store, ", "receipts.total_cost, ", "receipts.date, ", 0 };
+
+    if (s[0] == '*')
+        for (i = 0; cols[i]; ++i)
+            strncat(q, cols[i], strlen(cols[i]));
+    else
+        for (i = 0, len = strlen(s); i < len; ++i)
+            if (IS_DIGIT(s[i])) {
+                d = s[i] - '0';
+                strncat(q, cols[d], strlen(cols[d]));
+            }
+
+    // Is there an easier way to "remove" the last comma in the string?
+    char *last = strrchr(q, ',');
+    *last = '\0';
+
+    return 0;
+}
 
 void add_receipt(sqlite3 *db) {
     char *sql = "SELECT id, store, street, city, state FROM stores";
@@ -62,7 +87,8 @@ void add_receipt(sqlite3 *db) {
             strncat(date, day, 2);
             date[10] = '\0';
 
-            sql = "INSERT INTO receipts VALUES(NULL, cast(? as int), cast(? as real), cast(strftime('%s', ?) as int));";
+//             sql = "INSERT INTO receipts VALUES(NULL, cast(? as int), cast(? as real), cast(strftime('%s', ?) as int));";
+            sql = "INSERT INTO receipts VALUES(NULL, cast(? as int), cast(? as real), ?);";
             rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
             if (rc == SQLITE_OK) {
@@ -96,7 +122,7 @@ void add_receipt(sqlite3 *db) {
                             sqlite3_finalize(stmt);
                         } else
                             // TODO
-                            fprintf(stderr, "[ERROR] Bad shit happened: %s.\n", sqlite3_errmsg(db));
+                            fprintf(stderr, "[ERROR] Bad shit happened %s.\n", sqlite3_errmsg(db));
                     }
                 } else
                     sqlite3_finalize(stmt);
@@ -159,53 +185,6 @@ void add_store(sqlite3 *db) {
     sqlite3_finalize(stmt);
 }
 
-void *build_cols(char *s, char *q) {
-    int i, len, d;
-    // Note that to do a proper store name (INNER JOIN) lookup that "receipts.store_id" needs to be mapped to "stores.store".
-    char *cols[] = { "receipts.id, ", "stores.store, ", "receipts.item, ", "receipts.total_cost, ", "date(receipts.date, 'unixepoch'), ", 0 };
-
-    if (s[0] == '*')
-        for (i = 0; cols[i]; ++i)
-            strncat(q, cols[i], strlen(cols[i]));
-    else
-        for (i = 0, len = strlen(s); i < len; ++i)
-            if (IS_DIGIT(s[i])) {
-                d = s[i] - '0';
-                strncat(q, cols[d], strlen(cols[d]));
-            }
-
-    // Is there an easier way to "remove" the last comma in the string?
-    char *last = strrchr(q, ',');
-    *last = '\0';
-
-    return 0;
-}
-
-void clear(void) {
-    // Clear the screen.
-    // http://stackoverflow.com/questions/2347770/how-do-you-clear-console-screen-in-c#7660837
-    printf("\e[1;1H\e[2J");
-}
-
-sqlite3 *get_db(void) {
-    sqlite3 *db;
-
-    if (!fopen("./.receipts.db", "r")) {
-        fprintf(stderr, "[ERROR] No database, run `make install`.\n");
-        exit(1);
-    }
-
-    int rc = sqlite3_open("./.receipts.db", &db);
-
-    if (rc != SQLITE_OK) {
-        fprintf(stderr, "Failed to open database: %s\n", sqlite3_errmsg(db));
-        sqlite3_close(db);
-        exit(1);
-    }
-
-    return db;
-}
-
 int get_receipt_items(char *buf[][COLS], int n) {
     char *name = (char *) malloc(VALUE_MAX);
     char *cost = (char *) malloc(VALUE_MAX);
@@ -232,31 +211,6 @@ int get_receipt_items(char *buf[][COLS], int n) {
     return n;
 }
 
-int has_rows(sqlite3 *db, char *table) {
-    sqlite3_stmt *stmt;
-    char count[QUERY_MAX] = "SELECT COUNT(*) AS records FROM ";
-    int rc;
-
-    strncat(count, table, strlen(table) + 1);
-    rc = sqlite3_prepare_v2(db, count, -1, &stmt, 0);
-
-    if (rc == SQLITE_OK) {
-        rc = sqlite3_step(stmt);
-
-        if (rc == SQLITE_ROW) {
-            const unsigned char *text = sqlite3_column_text(stmt, 0);
-
-            if (text[0] != '0')
-                return 1;
-        }
-    } else
-        fprintf(stderr, "Could not select data: %s\n", sqlite3_errmsg(db));
-
-    sqlite3_finalize(stmt);
-
-    return 0;
-}
-
 void query(sqlite3 *db) {
     clear();
 
@@ -266,8 +220,6 @@ void query(sqlite3 *db) {
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
         if (rc == SQLITE_OK) {
-            sqlite3_finalize(stmt);
-
             int fn(void *_, int argc, char **argv, char **col_name) {
                 int i;
 
@@ -280,8 +232,8 @@ void query(sqlite3 *db) {
             }
 
             int i, ncols = sqlite3_column_count(stmt);
-            char cols[QUERY_MAX], query[QUERY_MAX] = "SELECT ";
-            char query_end[] = " FROM receipts INNER JOIN stores ON receipts.store_id = stores.id;";
+            char cols[QUERY_MAX], q[QUERY_MAX] = "SELECT ";
+            char q_end[] = " FROM receipts INNER JOIN stores ON receipts.store_id = stores.id;";
 
             printf("Select one or more comma-delimited columns, or * for all.\n");
             printf("\nColumns:\n\n");
@@ -291,14 +243,15 @@ void query(sqlite3 *db) {
 
             printf("\nSelect columns: ");
             strip_newline(fgets(cols, QUERY_MAX, stdin), '\0');
-            build_cols(cols, query);
+            add_cols_to_sql_query(cols, q);
 
             // Include the terminating null byte.
-            strncat(query, query_end, strlen(query_end) + 1);
+            strncat(q, q_end, strlen(q_end) + 1);
 
-            printf("\n%s\n\n", query);
+            // For debugging, print out query.
+            printf("\n%s\n\n", q);
 
-            rc = sqlite3_prepare_v2(db, query, -1, &stmt, 0);
+            rc = sqlite3_prepare_v2(db, q, -1, &stmt, 0);
 
             if (rc == SQLITE_OK) {
                 int ncols = sqlite3_column_count(stmt);
@@ -317,6 +270,8 @@ void query(sqlite3 *db) {
 
                     printf("\n\n");
                 }
+            } else {
+                fprintf(stderr, "[ERROR] Bad shit happened %s.\n", sqlite3_errmsg(db));
             }
 
             sqlite3_finalize(stmt);
@@ -326,22 +281,6 @@ void query(sqlite3 *db) {
         }
     } else
         printf("[WARN] There is no data. No data, no queries.\n\n");
-}
-
-void required(char *field, char *buf) {
-    printf(field);
-    fgets(buf, VALUE_MAX, stdin);
-
-    if (strlen(buf) == 1) {                         // Only contains newline.
-        fprintf(stderr, "\t\tCannot be blank\n");
-        required(field, buf);
-    }
-
-    strip_newline(buf, '\0');
-}
-
-void strip_newline(char *buf, char swap) {
-    buf[strcspn(buf, "\n")] = swap;
 }
 
 int main(void) {
