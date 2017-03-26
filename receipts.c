@@ -6,8 +6,8 @@
 #include "libdb.c"
 
 // TODO: Catch signals like Ctrl-C, Ctrl-D.
-// TODO: Should date be timestamp or just yyyy-mm-dd string?
 // TODO: sqlite3 finalize() calls.
+// TODO: Always show receipt_id in query results.
 
 void *add_cols_to_sql_query(char *s, char *q) {
         // SELECT stores.store, DATE(receipts.date, "unixepoch"), items.item, items.cost FROM receipts INNER JOIN stores ON receipts.store_id = stores.id INNER JOIN items ON receipts.id = items.receipt_id;
@@ -49,7 +49,7 @@ void add_receipt(sqlite3 *db) {
             int i;
 
             for (i = 0; i < ncols; ++i)
-                printf("\t%s", sqlite3_column_name(stmt, i));
+                printf("%15s", sqlite3_column_name(stmt, i));
 
             while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
                 int i;
@@ -57,7 +57,7 @@ void add_receipt(sqlite3 *db) {
                 printf("\n");
 
                 for (i = 0; i < ncols; ++i)
-                    printf("\t%s", sqlite3_column_text(stmt, i));
+                    printf("%15s", sqlite3_column_text(stmt, i));
             }
 
             printf("\n");
@@ -211,6 +211,59 @@ int get_receipt_items(char *buf[][COLS], int n) {
     return n;
 }
 
+// TODO: Temp function name.
+void more(sqlite3 *db) {
+    sqlite3_stmt *stmt;
+    char buf[5];
+
+    printf(
+        "More:\n\n"
+        "\t1. Show items\n"
+        "\t2. New query\n"
+        "\t3. Quit query\n"
+    );
+
+    required("\nSelect: ", buf);
+    // Convert to digit. (Is there a better way?)
+    int i = *buf - '0';
+
+    if (i == 1) {
+        required("Select receipt id: ", buf);
+        // Convert to digit. (Is there a better way?)
+        i = *buf - '0';
+
+        char *sql = "SELECT items.item, items.cost, items.quantity FROM items INNER JOIN receipts ON items.receipt_id = receipts.id WHERE items.receipt_id = ?";
+
+        int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+        if (rc == SQLITE_OK) {
+            sqlite3_bind_int(stmt, 1, i);
+            int ncols = sqlite3_column_count(stmt);
+
+            printf("\n");
+
+            for (i = 0; i < ncols; ++i)
+                printf("\t%s", sqlite3_column_name(stmt, i));
+
+            while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+                printf("\n");
+
+                for (i = 0; i < ncols; ++i)
+                    printf("\t%s", sqlite3_column_text(stmt, i));
+            }
+
+            sqlite3_finalize(stmt);
+
+            printf("\n\n");
+            more(db);
+        } else
+            fprintf(stderr, "[ERROR] Show items query failed %s.\n", sqlite3_errmsg(db));
+    } else if (i == 2)
+        query(db);
+    else
+        clear();
+}
+
 void query(sqlite3 *db) {
     clear();
 
@@ -256,20 +309,22 @@ void query(sqlite3 *db) {
             if (rc == SQLITE_OK) {
                 int ncols = sqlite3_column_count(stmt);
                 int i;
+                char buf[4];
 
                 for (i = 0; i < ncols; ++i)
-                    printf("\t%s", sqlite3_column_name(stmt, i));
+                    printf("%15s", sqlite3_column_name(stmt, i));
 
                 while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
-                    int i;
-
                     printf("\n");
 
                     for (i = 0; i < ncols; ++i)
-                        printf("\t%s", sqlite3_column_text(stmt, i));
-
-                    printf("\n\n");
+                        printf("%15s", sqlite3_column_text(stmt, i));
                 }
+
+                printf("\n\n");
+
+                // Display another menu.
+                more(db);
             } else {
                 fprintf(stderr, "[ERROR] Bad shit happened %s.\n", sqlite3_errmsg(db));
             }
