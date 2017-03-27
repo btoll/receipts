@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sqlite3.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include "receipts.h"
 #include "libdb.c"
 
@@ -344,6 +346,18 @@ int main(void) {
     int n;
     sqlite3 *db = get_db();
 
+    int fd;
+    struct flock lock;
+
+    fd = open("./.receipts.db", O_WRONLY);
+    memset(&lock, 0, sizeof(lock));
+    lock.l_type = F_WRLCK;
+
+    if ((n = fcntl(fd, F_SETLK, &lock) == -1)) {
+        fprintf(stderr, "[WARN] File is locked by another process.\n");
+        exit(1);
+    }
+
     clear();
 
     do {
@@ -375,6 +389,10 @@ int main(void) {
     } while (n != -1);
 
     sqlite3_close(db);
+
+    lock.l_type = F_UNLCK;
+    fcntl(fd, F_SETLKW, &lock);
+    close(fd);
 
     return 0;
 }
