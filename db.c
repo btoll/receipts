@@ -40,7 +40,7 @@ int main(void) {
                 id INTEGER PRIMARY KEY, \
                 store_id INTEGER, \
                 total_cost REAL NOT NULL, \
-                date TEXT NOT NULL, \
+                date INTEGER NOT NULL, \
                 FOREIGN KEY(store_id) REFERENCES stores(id)\
             );"
 

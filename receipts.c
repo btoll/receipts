@@ -7,14 +7,11 @@
 
 // TODO: Catch signals like Ctrl-C, Ctrl-D.
 // TODO: sqlite3 finalize() calls.
-// TODO: Always show receipt_id in query results.
 
 void *add_cols_to_sql_query(char *s, char *q) {
-        // SELECT stores.store, DATE(receipts.date, "unixepoch"), items.item, items.cost FROM receipts INNER JOIN stores ON receipts.store_id = stores.id INNER JOIN items ON receipts.id = items.receipt_id;
     int i, len, d;
     // Note that to do a proper store name (INNER JOIN) lookup that "receipts.store_id" needs to be mapped to "stores.store".
-//     char *cols[] = { "receipts.id, ", "stores.store, ", "receipts.total_cost, ", "DATE(receipts.date, 'unixepoch'), ", 0 };
-    char *cols[] = { "receipts.id, ", "stores.store, ", "receipts.total_cost, ", "receipts.date, ", 0 };
+    char *cols[] = { "receipts.id, ", "stores.store, ", "receipts.total_cost, ", "date(receipts.date, 'unixepoch'), ", 0 };
 
     if (s[0] == '*')
         for (i = 0; cols[i]; ++i)
@@ -62,11 +59,7 @@ void add_receipt(sqlite3 *db) {
 
             printf("\n");
 
-            char store_id[3];
-            char total_cost[VALUE_MAX];
-            char *year = (char *) malloc(5);
-            char *month = (char *) malloc(3);
-            char *day = (char *) malloc(3);
+            char store_id[3], total_cost[VALUE_MAX], year[VALUE_MAX], month[VALUE_MAX], day[VALUE_MAX];
 
             required("\n\tSelect store id: ", store_id);
 
@@ -75,20 +68,22 @@ void add_receipt(sqlite3 *db) {
             char *items[ROWS][COLS];
             int nrows = get_receipt_items(items, 0);
 
-            required("\tTotal cost (no dollar sign): ", total_cost);
-            required("\tMonth of purchase (MM): ", month);
-            required("\tDay of purchase (DD): ", day);
-            required("\tYear of purchase (YYYY): ", year);
+            required("\tTotal cost: ", total_cost);
+            required("\tMonth of purchase (mm): ", month);
+            required("\tDay of purchase (dd): ", day);
+            required("\tYear of purchase (yyyy): ", year);
 
+            printf("month %s\n", month);
+
+            // Create date string in the format `yyyy-mm-dd`.
             char *date = year;
-            strncat(date, "-", 1);
-            strncat(date, month, 2);
-            strncat(date, "-", 1);
-            strncat(date, day, 2);
+            strncat(date, "-", 2);
+            strncat(date, month, 3);
+            strncat(date, "-", 2);
+            strncat(date, day, 3);
             date[10] = '\0';
 
-//             sql = "INSERT INTO receipts VALUES(NULL, cast(? as int), cast(? as real), cast(strftime('%s', ?) as int));";
-            sql = "INSERT INTO receipts VALUES(NULL, cast(? as int), cast(? as real), ?);";
+            sql = "INSERT INTO receipts VALUES(NULL, cast(? as int), cast(? as real), cast(strftime('%s', ?) as int));";
             rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
             if (rc == SQLITE_OK) {
@@ -103,10 +98,12 @@ void add_receipt(sqlite3 *db) {
                 rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
                 if (rc == SQLITE_OK) {
+                    int last_insert_id;
+
                     sqlite3_step(stmt);
                     sqlite3_finalize(stmt);
 
-                    int last_insert_id = sqlite3_last_insert_rowid(db);
+                    last_insert_id = sqlite3_last_insert_rowid(db);
 
                     for (i = 0; i < nrows; ++i) {
                         sql = "INSERT INTO items VALUES(NULL, ?, ?, cast(? as real), cast(? as real));";
@@ -132,10 +129,6 @@ void add_receipt(sqlite3 *db) {
                 printf("\n[SUCCESS] Added receipt and items.\n\n");
             } else
                 fprintf(stderr, "Failed to execute statement: %s\n", sqlite3_errmsg(db));
-
-            free(year);
-            free(month);
-            free(day);
         } else {
             sqlite3_finalize(stmt);
             fprintf(stderr, "Could not select data: %s\n", sqlite3_errmsg(db));
@@ -211,59 +204,6 @@ int get_receipt_items(char *buf[][COLS], int n) {
     return n;
 }
 
-// TODO: Temp function name.
-void more(sqlite3 *db) {
-    sqlite3_stmt *stmt;
-    char buf[5];
-
-    printf(
-        "More:\n\n"
-        "\t1. Show items\n"
-        "\t2. New query\n"
-        "\t3. Quit query\n"
-    );
-
-    required("\nSelect: ", buf);
-    // Convert to digit. (Is there a better way?)
-    int i = *buf - '0';
-
-    if (i == 1) {
-        required("Select receipt id: ", buf);
-        // Convert to digit. (Is there a better way?)
-        i = *buf - '0';
-
-        char *sql = "SELECT items.item, items.cost, items.quantity FROM items INNER JOIN receipts ON items.receipt_id = receipts.id WHERE items.receipt_id = ?";
-
-        int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
-
-        if (rc == SQLITE_OK) {
-            sqlite3_bind_int(stmt, 1, i);
-            int ncols = sqlite3_column_count(stmt);
-
-            printf("\n");
-
-            for (i = 0; i < ncols; ++i)
-                printf("\t%s", sqlite3_column_name(stmt, i));
-
-            while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
-                printf("\n");
-
-                for (i = 0; i < ncols; ++i)
-                    printf("\t%s", sqlite3_column_text(stmt, i));
-            }
-
-            sqlite3_finalize(stmt);
-
-            printf("\n\n");
-            more(db);
-        } else
-            fprintf(stderr, "[ERROR] Show items query failed %s.\n", sqlite3_errmsg(db));
-    } else if (i == 2)
-        query(db);
-    else
-        clear();
-}
-
 void query(sqlite3 *db) {
     clear();
 
@@ -323,8 +263,7 @@ void query(sqlite3 *db) {
 
                 printf("\n\n");
 
-                // Display another menu.
-                more(db);
+                show_items_menu(db);
             } else {
                 fprintf(stderr, "[ERROR] Bad shit happened %s.\n", sqlite3_errmsg(db));
             }
@@ -336,6 +275,63 @@ void query(sqlite3 *db) {
         }
     } else
         printf("[WARN] There is no data. No data, no queries.\n\n");
+}
+
+void show_items_menu(sqlite3 *db) {
+    sqlite3_stmt *stmt;
+    char buf[5];
+    int i;
+
+    printf(
+        "More:\n\n"
+        "\t1. Show items\n"
+        "\t2. New query\n"
+        "\t3. Quit query\n"
+    );
+
+    required("\nSelect: ", buf);
+    // Convert to digit. (Is there a better way?)
+    i = *buf - '0';
+
+    if (i == 1) {
+        char *sql;
+        int rc;
+
+        required("Select receipt id: ", buf);
+        // Convert to digit. (Is there a better way?)
+        i = *buf - '0';
+
+        sql = "SELECT items.item, items.cost, items.quantity FROM items INNER JOIN receipts ON items.receipt_id = receipts.id WHERE items.receipt_id = ?";
+        rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+        if (rc == SQLITE_OK) {
+            int ncols;
+
+            sqlite3_bind_int(stmt, 1, i);
+            ncols = sqlite3_column_count(stmt);
+
+            printf("\n");
+
+            for (i = 0; i < ncols; ++i)
+                printf("\t%s", sqlite3_column_name(stmt, i));
+
+            while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+                printf("\n");
+
+                for (i = 0; i < ncols; ++i)
+                    printf("\t%s", sqlite3_column_text(stmt, i));
+            }
+
+            sqlite3_finalize(stmt);
+
+            printf("\n\n");
+            show_items_menu(db);
+        } else
+            fprintf(stderr, "[ERROR] Show items query failed %s.\n", sqlite3_errmsg(db));
+    } else if (i == 2)
+        query(db);
+    else
+        clear();
 }
 
 int main(void) {

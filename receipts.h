@@ -16,6 +16,7 @@ int get_receipt_items(char *buf[ROWS][COLS], int n);
 int has_rows(sqlite3 *db, char *table);
 void query(sqlite3 *db);
 void required(char *field, char *buf);
+void show_items_menu(sqlite3 *db);
 void strip_newline(char *buf, char swap);
 
 #endif
