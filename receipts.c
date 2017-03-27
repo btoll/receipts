@@ -11,7 +11,8 @@
 void *add_cols_to_sql_query(char *s, char *q) {
     int i, len, d;
     // Note that to do a proper store name (INNER JOIN) lookup that "receipts.store_id" needs to be mapped to "stores.store".
-    char *cols[] = { "receipts.id, ", "stores.store, ", "receipts.total_cost, ", "date(receipts.date, 'unixepoch'), ", 0 };
+//     char *cols[] = { "receipts.id, ", "stores.store, ", "receipts.total_cost, ", "date(receipts.date, 'unixepoch'), ", 0 };
+    char *cols[] = { "receipts.id, ", "stores.store AS Store, ", "receipts.total_cost, ", "receipts.date AS Date, ", 0 };
 
     if (s[0] == '*')
         for (i = 0; cols[i]; ++i)
@@ -69,11 +70,16 @@ void add_receipt(sqlite3 *db) {
             int nrows = get_receipt_items(items, 0);
 
             required("\tTotal cost: ", total_cost);
+
+            if (total_cost[0] == '$') {
+                // TODO: Here we're avoiding using a temp var.  Is this good practice or worth it?
+                strncpy(total_cost, &total_cost[1], strlen(total_cost) - 1);
+                total_cost[strlen(total_cost) - 1] = '\0';
+            }
+
             required("\tMonth of purchase (mm): ", month);
             required("\tDay of purchase (dd): ", day);
             required("\tYear of purchase (yyyy): ", year);
-
-            printf("month %s\n", month);
 
             // Create date string in the format `yyyy-mm-dd`.
             char *date = year;
@@ -249,7 +255,6 @@ void query(sqlite3 *db) {
             if (rc == SQLITE_OK) {
                 int ncols = sqlite3_column_count(stmt);
                 int i;
-                char buf[4];
 
                 for (i = 0; i < ncols; ++i)
                     printf("%15s", sqlite3_column_name(stmt, i));
@@ -301,7 +306,7 @@ void show_items_menu(sqlite3 *db) {
         // Convert to digit. (Is there a better way?)
         i = *buf - '0';
 
-        sql = "SELECT items.item, items.cost, items.quantity FROM items INNER JOIN receipts ON items.receipt_id = receipts.id WHERE items.receipt_id = ?";
+        sql = "SELECT items.item AS Item, items.cost AS Cost, items.quantity AS Quantity FROM items INNER JOIN receipts ON items.receipt_id = receipts.id WHERE items.receipt_id = ?";
         rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
         if (rc == SQLITE_OK) {
