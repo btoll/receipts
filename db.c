@@ -25,6 +25,7 @@ int main(void) {
             "DROP TABLE IF EXISTS stores;"
             "DROP TABLE IF EXISTS receipts;"
             "DROP TABLE IF EXISTS items;"
+            "DROP TABLE IF EXISTS products;"
 
             "CREATE TABLE stores (\
                 id INTEGER PRIMARY KEY, \
@@ -46,12 +47,20 @@ int main(void) {
 
             "CREATE TABLE items (\
                 id INTEGER PRIMARY KEY, \
-                receipt_id INTEGER, \
-                item TEXT NOT NULL, \
+                receipt_id INTEGER NOT NULL, \
+                product_id INTEGER NOT NULL, \
                 cost REAL NOT NULL, \
                 quantity REAL NOT NULL, \
-                FOREIGN KEY(receipt_id) REFERENCES receipts(id)\
+                FOREIGN KEY(receipt_id) REFERENCES receipts(id), \
+                FOREIGN KEY(product_id) REFERENCES products(id)\
+            );"
+
+            "CREATE TABLE products (\
+                id INTEGER PRIMARY KEY, \
+                product TEXT NOT NULL, \
+                brand TEXT NOT NULL\
             );";
+
 
         res = sqlite3_exec(db, sql, 0, 0, &err_msg);
 

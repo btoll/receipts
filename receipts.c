@@ -33,6 +33,31 @@ void *add_cols_to_sql_query(char *s, char *q) {
     return 0;
 }
 
+void add_product(sqlite3 *db) {
+    sqlite3_stmt *stmt;
+    char product[VALUE_MAX];
+    char brand[VALUE_MAX];
+
+    required("\n\tProduct name: ", product);
+    required("\n\tBrand name: ", brand);
+
+    char *sql = "INSERT INTO products VALUES(NULL, ?, ?);";
+    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+    if (rc == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, product, -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 2, brand, -1, SQLITE_STATIC);
+
+        sqlite3_step(stmt);
+
+        clear();
+        printf("\n[SUCCESS] Added product.\n\n");
+    } else
+        fprintf(stderr, "Failed to execute statement: %s\n", sqlite3_errmsg(db));
+
+    sqlite3_finalize(stmt);
+}
+
 void add_receipt(sqlite3 *db) {
     char *sql = "SELECT id, store, street, city, state FROM stores";
     char *err_msg = 0;
@@ -124,10 +149,11 @@ void add_receipt(sqlite3 *db) {
                             sqlite3_bind_text(stmt, 4, items[i][2], -1, SQLITE_STATIC);
 
                             sqlite3_step(stmt);
-                            sqlite3_finalize(stmt);
                         } else
                             // TODO
                             fprintf(stderr, "[ERROR] Bad shit happened %s.\n", sqlite3_errmsg(db));
+
+                        sqlite3_finalize(stmt);
                     }
                 } else
                     sqlite3_finalize(stmt);
@@ -308,7 +334,7 @@ void show_items_menu(sqlite3 *db) {
         // Convert to digit. (Is there a better way?)
         i = *buf - '0';
 
-        sql = "SELECT items.item AS Item, items.cost AS Cost, items.quantity AS Quantity FROM items INNER JOIN receipts ON items.receipt_id = receipts.id WHERE items.receipt_id = ?";
+        sql = "SELECT products.product AS Item, products.brand AS Brand, items.cost AS Cost, items.quantity AS Quantity FROM items INNER JOIN products ON items.product_id = products.id INNER JOIN receipts ON items.receipt_id = receipts.id WHERE items.receipt_id = ?";
         rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
         if (rc == SQLITE_OK) {
@@ -365,8 +391,9 @@ int main(void) {
             "What do you want to do?\n\n"
             "\t1. New receipt\n"
             "\t2. New store\n"
-            "\t3. Query\n"
-            "\t4. Exit\n"
+            "\t3. New product\n"
+            "\t4. Query\n"
+            "\t5. Exit\n"
         );
 
         required("\nSelect: ", buf);
@@ -378,8 +405,10 @@ int main(void) {
         else if (n == 2)
             add_store(db);
         else if (n == 3)
+            add_product(db);
+        else if (n == 4)
             query(db);
-        else if (n == 4) {
+        else if (n == 5) {
             printf("Goodbye.\n");
             n = -1;
         } else {
