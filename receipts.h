@@ -4,7 +4,7 @@
 #define COLS 50
 #define ROWS 50
 #define QUERY_MAX 150
-#define VALUE_MAX 50
+#define VALUE_MAX 100
 #define IS_DIGIT(N) ((N) >= '0' && (N) <= '9')
 
 void *add_cols_to_sql_query(char *s, char *q);

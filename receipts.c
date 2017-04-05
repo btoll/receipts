@@ -49,7 +49,7 @@ void add_receipt(sqlite3 *db) {
             int i;
 
             for (i = 0; i < ncols; ++i)
-                printf("%15s", sqlite3_column_name(stmt, i));
+                printf("%30s", sqlite3_column_name(stmt, i));
 
             while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
                 int i;
@@ -57,7 +57,7 @@ void add_receipt(sqlite3 *db) {
                 printf("\n");
 
                 for (i = 0; i < ncols; ++i)
-                    printf("%15s", sqlite3_column_text(stmt, i));
+                    printf("%30s", sqlite3_column_text(stmt, i));
             }
 
             printf("\n");
@@ -259,13 +259,13 @@ void query(sqlite3 *db) {
                 int i;
 
                 for (i = 0; i < ncols; ++i)
-                    printf("%15s", sqlite3_column_name(stmt, i));
+                    printf("%30s", sqlite3_column_name(stmt, i));
 
                 while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
                     printf("\n");
 
                     for (i = 0; i < ncols; ++i)
-                        printf("%15s", sqlite3_column_text(stmt, i));
+                        printf("%30s", sqlite3_column_text(stmt, i));
                 }
 
                 printf("\n\n");
@@ -320,13 +320,13 @@ void show_items_menu(sqlite3 *db) {
             printf("\n");
 
             for (i = 0; i < ncols; ++i)
-                printf("\t%s", sqlite3_column_name(stmt, i));
+                printf("\t%30s", sqlite3_column_name(stmt, i));
 
             while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
                 printf("\n");
 
                 for (i = 0; i < ncols; ++i)
-                    printf("\t%s", sqlite3_column_text(stmt, i));
+                    printf("\t%30s", sqlite3_column_text(stmt, i));
             }
 
             sqlite3_finalize(stmt);

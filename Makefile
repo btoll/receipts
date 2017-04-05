@@ -9,7 +9,7 @@ all: db receipts
 db: db.o
 	$(CC) $(WARN) -o db db.c $(LDLIBS)
 
-receipts: receipts.o
+receipts: receipts.o receipts.h
 	$(CC) $(WARN) -o receipts receipts.c $(LDLIBS)
 
 clean:
